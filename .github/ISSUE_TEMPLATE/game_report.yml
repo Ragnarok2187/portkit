@@ -1,0 +1,48 @@
+name: Game compatibility
+description: Report how a specific game runs (works, broken, or somewhere in between)
+labels: [compatibility]
+body:
+  - type: input
+    id: game
+    attributes:
+      label: Game and App ID
+      placeholder: Hollow Knight (367520)
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: How does it run?
+      options:
+        - Works perfectly
+        - Playable with minor issues
+        - Starts but unplayable
+        - Doesn't start
+    validations:
+      required: true
+  - type: dropdown
+    id: graphics
+    attributes:
+      label: Graphics backend
+      options:
+        - OpenGL (WineD3D)
+        - Vulkan/Metal (DXVK)
+        - Custom Wine (Game Porting Toolkit / other)
+  - type: input
+    id: mac
+    attributes:
+      label: Mac and macOS version
+      placeholder: Mac mini M4, macOS 15.3
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Launch options that helped, whether Windows Steam was needed, performance, etc.
+  - type: textarea
+    id: log
+    attributes:
+      label: Game log
+      description: Library → ⋯ → Open Log. Paste the last ~100 lines.
+      render: text

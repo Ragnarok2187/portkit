@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: swift --version
+      - name: Test
+        run: swift test
+      - name: Build universal app
+        run: ./build.sh
+      - name: Check the bundle
+        run: |
+          test -x dist/PortKit.app/Contents/MacOS/PortKit
+          lipo -archs dist/PortKit.app/Contents/MacOS/PortKit | grep -q arm64
+          lipo -archs dist/PortKit.app/Contents/MacOS/PortKit | grep -q x86_64
+          codesign --verify --verbose dist/PortKit.app

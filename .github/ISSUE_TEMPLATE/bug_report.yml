@@ -1,0 +1,29 @@
+name: Bug report
+description: PortKit itself misbehaves (setup, sign-in, downloads, the app UI)
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac and macOS version
+      placeholder: MacBook Air M2, macOS 15.3
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: PortKit version
+      placeholder: 0.1.0
+  - type: textarea
+    id: log
+    attributes:
+      label: Activity log
+      description: Activity → Copy Log, then paste here. Remove anything you consider private.
+      render: text
