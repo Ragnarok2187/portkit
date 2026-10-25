@@ -132,7 +132,7 @@ enum Wine {
     static var windowsSteamRunning: Bool {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        p.arguments = ["-f", "Steam/steam.exe"]
+        p.arguments = ["-f", "Steam.steam\\.exe"]   // Wine reports Windows paths (Steam\steam.exe)
         p.standardOutput = FileHandle.nullDevice
         guard (try? p.run()) != nil else { return false }
         p.waitUntilExit()

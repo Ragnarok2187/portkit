@@ -187,7 +187,7 @@ enum Porter {
         fail() { osascript -e "display alert \\"$1\\" message \\"$2\\"" >/dev/null 2>&1; exit 1; }
         [ -x "$WINE" ] || fail "Wine not found" "Open PortKit and reinstall Wine on the Setup page."
         [ -f "$EXE" ] || fail "Game files not found" "Open PortKit and reinstall this game."
-        steam_running() { pgrep -f 'Steam/steam.exe' >/dev/null; }
+        steam_running() { pgrep -f 'Steam.steam\\.exe' >/dev/null; }
         signed_in() { grep -q '"AccountName"' "$WINEPREFIX/drive_c/Program Files (x86)/Steam/config/loginusers.vdf" 2>/dev/null; }
         start_steam() {
           steam_running && return
