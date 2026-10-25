@@ -11,6 +11,8 @@ enum Paths {
     static let prefix = support.appendingPathComponent("prefix", isDirectory: true)
     static let libraryDB = support.appendingPathComponent("library.json")
     static let logs = fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/PortKit", isDirectory: true)
+    /// A game's launcher touches this when it needs Steam signed in, so PortKit opens its Steam pane.
+    static let showSteamFlag = support.appendingPathComponent("show-steam")
     static let appsOut = fm.homeDirectoryForCurrentUser.appendingPathComponent("Applications/PortKit Games", isDirectory: true)
 
     static var gamesRoot: URL {

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Locates or installs a macOS Wine build and manages the shared Windows prefix.
@@ -137,6 +138,30 @@ enum Wine {
         guard (try? p.run()) != nil else { return false }
         p.waitUntilExit()
         return p.terminationStatus == 0
+    }
+
+    /// Full command line of a process (argv joined), read with sysctl(KERN_PROCARGS2).
+    static func commandLine(of pid: pid_t) -> String? {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size = 0
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return nil }
+        var buf = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0, size > 4 else { return nil }
+        // Layout: argc (Int32), exec path, NULs, then argv strings separated by NULs.
+        return String(decoding: buf[4..<size].map { $0 == 0 ? 0x20 : $0 }, as: UTF8.self)
+    }
+
+    /// Steam's own windows are black under Wine's macOS driver; PortKit shows them in its Steam pane
+    /// instead, so hide the native ones. Only Steam's processes are touched, never a game's.
+    @MainActor
+    static func hideNativeSteamWindows() {
+        for app in NSWorkspace.shared.runningApplications where !app.isHidden {
+            guard app.localizedName == "wine" || app.executableURL?.path.contains("/wine/") == true,
+                  let cmd = commandLine(of: app.processIdentifier) else { continue }
+            if cmd.contains("steamwebhelper.exe") || cmd.contains("\\Steam\\steam.exe") || cmd.contains("Steam/steam.exe") {
+                app.hide()
+            }
+        }
     }
 
     /// Starts Windows Steam in the background (if it isn't running) without waiting for it to exit.

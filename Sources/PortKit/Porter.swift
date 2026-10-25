@@ -201,9 +201,13 @@ enum Porter {
         if [ \(game.launchThroughSteam ? "1" : "0") = 1 ]; then
           [ -f "$STEAM_EXE" ] || fail "Steam for Windows is needed" "This game uses Steam copy protection. Open PortKit, go to Setup, and install Steam for Windows."
           if ! signed_in; then
+            touch \(Paths.showSteamFlag.path.shellQuoted)
+            open -b io.github.portkit
             fail "Sign in to Steam for Windows" "This game needs Steam for Windows to be signed in. Open PortKit, click Steam in the sidebar and sign in, then open \(game.name.replacingOccurrences(of: "\"", with: "").replacingOccurrences(of: "'", with: "")) again."
           fi
           start_steam
+          # PortKit shows Steam's dialogs (license agreements, first-run installers) that are black under Wine.
+          pgrep -x PortKit >/dev/null || open -g -b io.github.portkit
           "$WINE" "$STEAM_EXE" -silent -applaunch \(game.appID) \(args) "$@" >>"$LOG" 2>&1
           # Stay open while the game runs so the Dock shows it as running.
           EXE_NAME="$(basename "$EXE")"

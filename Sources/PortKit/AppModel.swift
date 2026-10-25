@@ -36,8 +36,21 @@ final class AppModel: ObservableObject {
 
     var ready: Bool { steamcmdInstalled && wine != nil && prefixReady && signedInUser != nil && rosetta }
 
+
     init() {
         Task { rosetta = await Wine.rosettaAvailable() }
+        Task { [weak self] in
+            while !Task.isCancelled {
+                Wine.hideNativeSteamWindows()
+                if FileManager.default.fileExists(atPath: Paths.showSteamFlag.path) {
+                    try? FileManager.default.removeItem(at: Paths.showSteamFlag)
+                    self?.refresh()
+                    self?.pane = .steam
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+            }
+        }
     }
 
     func append(_ line: String) {
@@ -311,6 +324,11 @@ final class AppModel: ObservableObject {
     }
 
     func launch(_ game: PortedGame) {
+        if game.launchThroughSteam && !Wine.windowsSteamSignedIn {
+            openWindowsSteam()
+            notice = "\(game.name) needs Steam for Windows to be signed in first. Sign in here (scan the QR code with the Steam Mobile app, or type your account name and password), then press Play again."
+            return
+        }
         let url = URL(fileURLWithPath: game.appPath)
         guard FileManager.default.fileExists(atPath: url.path) else {
             save(game)
