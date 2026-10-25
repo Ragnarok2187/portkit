@@ -70,6 +70,26 @@ import Testing
     }
 }
 
+@Suite struct SteamWindows {
+    func page(_ id: String, _ title: String, _ url: String = "about:blank?createflags=2") -> SteamUI.Page {
+        SteamUI.Page(id: id, title: title, type: "page", url: url, webSocketDebuggerUrl: nil)
+    }
+
+    @Test func hidesHelperPages() {
+        let all = [page("1", "Steam"), page("2", "Account Menu"), page("3", "Store Supernav"),
+                   page("4", "Welcome to Steam", "https://store.steampowered.com/"), page("5", "SharedJSContext", "https://steamloopback.host/"),
+                   page("6", "Friends List")]
+        #expect(SteamUI.visiblePages(all).map(\.title) == ["Steam", "Friends List"])
+    }
+
+    @Test func prefersSignInThenNewDialogThenMain() {
+        let main = page("1", "Steam"), friends = page("2", "Friends List"), dialog = page("3", "Install - Game")
+        #expect(SteamUI.preferred([friends, main], newIDs: []) == main)
+        #expect(SteamUI.preferred([friends, main, dialog], newIDs: ["3"]) == dialog)
+        #expect(SteamUI.preferred([main, page("4", "Sign in to Steam")], newIDs: []).map(\.id) == "4")
+    }
+}
+
 @Suite struct Porting {
     func makeGame(_ files: [String: Int]) throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("portkit-test-\(UUID().uuidString)")

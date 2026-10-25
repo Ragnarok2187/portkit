@@ -29,10 +29,25 @@ final class SteamUI: ObservableObject {
     private var pollTask: Task<Void, Never>?
     static let endpoint = URL(string: "http://127.0.0.1:8080/json")!
 
-    /// Windows a person would interact with; Steam's hidden JS host page is never one of them.
-    static func visiblePages(_ all: [Page]) -> [Page] {
-        all.filter { $0.type == "page" && !$0.title.isEmpty && $0.title != "SharedJSContext" && !$0.title.hasPrefix("Steam Big Picture") }
+    /// Steam's own top-level windows. Embedded store/community views (https URLs), the hidden JS host,
+    /// and the pre-created menus and nav flyouts are not windows a person needs to see.
+    nonisolated static func visiblePages(_ all: [Page]) -> [Page] {
+        all.filter { p in
+            p.type == "page" && !p.title.isEmpty && p.url.hasPrefix("about:blank")
+                && !p.title.hasSuffix("Menu") && !p.title.hasSuffix("Supernav")
+                && !p.title.hasPrefix("Steam Big Picture")
+        }
     }
+
+    /// Which window to show: sign-in first, then any window that just appeared (a dialog), then Steam's main window.
+    nonisolated static func preferred(_ pages: [Page], newIDs: Set<String>) -> Page? {
+        pages.first { $0.title.localizedCaseInsensitiveContains("sign in") }
+            ?? pages.first { newIDs.contains($0.id) && $0.title != "Friends List" && $0.title != "Special Offers" }
+            ?? pages.first { $0.title == "Steam" }
+            ?? pages.first
+    }
+
+    private var seenIDs: Set<String> = []
 
     func start() {
         guard pollTask == nil else { return }
@@ -65,14 +80,16 @@ final class SteamUI: ObservableObject {
         do {
             let (data, _) = try await URLSession.shared.data(from: Self.endpoint)
             let found = Self.visiblePages(try JSONDecoder().decode([Page].self, from: data))
+            let newIDs = seenIDs.isEmpty ? [] : Set(found.map(\.id)).subtracting(seenIDs)
+            seenIDs.formUnion(found.map(\.id))
             pages = found
             if let current = selected, !found.contains(where: { $0.id == current.id }) {
                 selected = nil
                 disconnect()
             }
-            if selected == nil {
-                // Prefer the sign-in window, then whatever Steam opened most recently.
-                selected = found.first { $0.title.localizedCaseInsensitiveContains("sign in") } ?? found.first
+            // Jump to a dialog that just opened; otherwise keep what the user picked.
+            if selected == nil || !newIDs.isEmpty, let pick = Self.preferred(found, newIDs: newIDs), pick.id != selected?.id {
+                select(pick)
             }
             status = found.isEmpty ? "Steam is running but has no windows open." : ""
         } catch {
