@@ -29,6 +29,9 @@ runs, and DirectX is translated to Metal.
   with a Windows Steam client inside the prefix and launched through it. Steam's own windows render black
   under Wine on macOS, so PortKit shows them in its **Steam** pane, where you can sign in (QR code or password)
   and answer any Steam dialog.
+- **32-bit games work on Apple Silicon:** stock Wine hangs or crashes most 32-bit Direct3D games under
+  Rosetta 2 ([WineHQ 60494](https://bugs.winehq.org/show_bug.cgi?id=60494)). PortKit pins a tested Wine
+  release and ships CodeWeavers' fix for it (see [WinePatches](WinePatches/README.md)).
 - **Compatibility warnings:** PortKit detects kernel anti-cheat (Easy Anti-Cheat, BattlEye and others) and
   Steamworks requirements, and tells you before you hit Play.
 - **Per-game settings:** pick the executable, launch options, graphics backend and Steam start-up behavior.
@@ -63,7 +66,10 @@ runs, and DirectX is translated to Metal.
 4. **Library** → **Play**, or open the game from `~/Applications/PortKit Games`.
 
 Games with Steam copy protection (for example Batman: Arkham City) need Steam for Windows signed in once:
-open the **Steam** pane in PortKit and sign in there.
+open the **Steam** pane in PortKit and sign in there. The first launch may show Steam's license agreement (in the
+Steam pane) and then the game's own launcher window; PortKit minimizes itself once the game starts.
+
+Tested: **Batman: Arkham City – Game of the Year Edition** (32-bit, DirectX 9) on an Apple M4 Mac.
 
 If a game doesn't start, open **Library → ⋯ → Open Log**, try the other graphics backend under
 **Settings…**, or install the Windows Steam client from Setup (needed by most games that show the

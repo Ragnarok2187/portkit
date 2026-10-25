@@ -44,10 +44,13 @@ enum Wine {
         #endif
     }
 
-    /// Downloads the latest Gcenx macOS Wine build (includes MoltenVK for Vulkan/DXVK).
+    /// The Wine release PortKit installs and has tested; Resources/ carries the Rosetta fix built for it.
+    static let pinnedVersion = "11.18"
+
+    /// Downloads the pinned Gcenx macOS Wine build (includes MoltenVK for Vulkan/DXVK).
     static func install(log: @escaping @Sendable (String) -> Void) async throws {
-        let rel = try await Net.latestRelease("Gcenx/macOS_Wine_builds")
-        let pick = ["wine-stable", "wine-staging", "wine-devel"].lazy.compactMap { flavor in
+        let rel = try await Net.release("Gcenx/macOS_Wine_builds", tag: pinnedVersion)
+        let pick = ["wine-staging", "wine-devel", "wine-stable"].lazy.compactMap { flavor in
             rel.assets.first { $0.name.hasPrefix(flavor) && $0.name.hasSuffix(".tar.xz") }
         }.first
         guard let asset = pick else { throw PortKitError("No macOS Wine build found in release \(rel.tag_name).") }
@@ -69,6 +72,48 @@ enum Wine {
         try FileManager.default.moveItem(at: staging, to: Paths.wineDir)
         await ProcessRunner.run(URL(fileURLWithPath: "/usr/bin/xattr"), ["-dr", "com.apple.quarantine", Paths.wineDir.path])
         log("Wine \(rel.tag_name) installed.")
+        applyRosettaFix(log: log)
+    }
+
+    /// Version from the Wine.app bundle that contains a wine binary (e.g. "11.18").
+    static func version(of wine: URL) -> String? {
+        var dir = wine.deletingLastPathComponent()
+        while dir.pathComponents.count > 1 {
+            if dir.pathExtension == "app" {
+                let plist = NSDictionary(contentsOf: dir.appendingPathComponent("Contents/Info.plist"))
+                return plist?["CFBundleShortVersionString"] as? String
+            }
+            dir.deleteLastPathComponent()
+        }
+        return nil
+    }
+
+    /// Installs PortKit's patched wow64cpu.dll (WinePatches/README.md) into the PortKit-managed Wine so 32-bit games
+    /// don't crash under Rosetta 2 (WineHQ bug 60494). Only touches the exact Wine version it was built for.
+    @discardableResult
+    static func applyRosettaFix(log: (@Sendable (String) -> Void)? = nil) -> Bool {
+        #if arch(arm64)
+        let fm = FileManager.default
+        guard let wine = findWineBinary(in: Paths.wineDir), let version = version(of: wine),
+              let fixed = Bundle.main.url(forResource: "wow64cpu-\(version)-rosetta", withExtension: "dll") else { return false }
+        let target = wine.deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("lib/wine/x86_64-windows/wow64cpu.dll")
+        guard fm.fileExists(atPath: target.path) else { return false }
+        if fm.contentsEqual(atPath: fixed.path, andPath: target.path) { return true }
+        let backup = target.appendingPathExtension("stock")
+        if !fm.fileExists(atPath: backup.path) { try? fm.copyItem(at: target, to: backup) }
+        do {
+            try? fm.removeItem(at: target)
+            try fm.copyItem(at: fixed, to: target)
+            log?("Applied the Rosetta fix for 32-bit games to Wine \(version).")
+            return true
+        } catch {
+            log?("Couldn't apply the Rosetta fix: \(error.localizedDescription)")
+            return false
+        }
+        #else
+        return false
+        #endif
     }
 
     static var env: [String: String] {

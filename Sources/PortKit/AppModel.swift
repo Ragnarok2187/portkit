@@ -40,6 +40,8 @@ final class AppModel: ObservableObject {
 
     init() {
         Task { rosetta = await Wine.rosettaAvailable() }
+        // Also upgrades Wine installs made before PortKit shipped the fix.
+        Wine.applyRosettaFix()
         Task { [weak self] in
             while !Task.isCancelled {
                 Wine.hideNativeSteamWindows()

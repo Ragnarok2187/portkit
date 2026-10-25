@@ -200,6 +200,10 @@ enum Net {
     static func latestRelease(_ repo: String) async throws -> GitHubRelease {
         try await json(GitHubRelease.self, from: URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!)
     }
+
+    static func release(_ repo: String, tag: String) async throws -> GitHubRelease {
+        try await json(GitHubRelease.self, from: URL(string: "https://api.github.com/repos/\(repo)/releases/tags/\(tag)")!)
+    }
 }
 
 extension String {
