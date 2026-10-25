@@ -156,6 +156,7 @@ import Testing
         let script = Porter.launchScript(for: game, wine: URL(fileURLWithPath: "/w/bin/wine"))
         #expect(script.contains("-applaunch 200260"))
         #expect(script.contains("loginusers.vdf"))
+        #expect(script.contains("-cef-disable-gpu"))
     }
 
     @Test func steamworksGamesDefaultToSteamLaunch() throws {

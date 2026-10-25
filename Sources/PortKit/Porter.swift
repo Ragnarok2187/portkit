@@ -180,6 +180,7 @@ enum Porter {
         EXE=\(game.exePath.shellQuoted)
         LOG=\(Paths.logs.appendingPathComponent("\(game.appID).log").path.shellQuoted)
         STEAM_EXE="$WINEPREFIX/drive_c/Program Files (x86)/Steam/steam.exe"
+        STEAM_FLAGS="\(Wine.steamFlags.joined(separator: " "))"
         mkdir -p "$(dirname "$LOG")"
         echo "=== launch $(date) ===" >>"$LOG"
         fail() { osascript -e "display alert \\"$1\\" message \\"$2\\"" >/dev/null 2>&1; exit 1; }
@@ -189,7 +190,7 @@ enum Porter {
         signed_in() { grep -q '"AccountName"' "$WINEPREFIX/drive_c/Program Files (x86)/Steam/config/loginusers.vdf" 2>/dev/null; }
         start_steam() {
           steam_running && return
-          "$WINE" "$STEAM_EXE" -silent -no-browser >>"$LOG" 2>&1 &
+          "$WINE" "$STEAM_EXE" -silent -no-browser $STEAM_FLAGS >>"$LOG" 2>&1 &
           # Give the Windows Steam client time to sign in before the game asks it for anything.
           for i in $(seq 1 45); do
             pgrep -f 'steamwebhelper' >/dev/null && break
@@ -200,7 +201,9 @@ enum Porter {
         if [ \(game.launchThroughSteam ? "1" : "0") = 1 ]; then
           [ -f "$STEAM_EXE" ] || fail "Steam for Windows is needed" "This game uses Steam copy protection. Open PortKit, go to Setup, and install Steam for Windows."
           if ! signed_in; then
-            "$WINE" "$STEAM_EXE" "steam://open/main" >>"$LOG" 2>&1 &
+            steam_running || { "$WINE" "$STEAM_EXE" $STEAM_FLAGS >>"$LOG" 2>&1 & }
+            sleep 2
+            "$WINE" "$STEAM_EXE" $STEAM_FLAGS "steam://open/main" >>"$LOG" 2>&1 &
             fail "Sign in to Steam for Windows" "The Steam window is opening. Sign in with your Steam account (tick Remember me), then open \(game.name.replacingOccurrences(of: "\"", with: "").replacingOccurrences(of: "'", with: "")) again."
           fi
           start_steam

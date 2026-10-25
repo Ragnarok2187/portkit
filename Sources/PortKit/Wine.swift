@@ -113,6 +113,9 @@ enum Wine {
         try await Net.download(URL(string: "https://cdn.cloudflare.steamstatic.com/client/installer/SteamSetup.exe")!, to: setup)
         log("Installing Windows Steam into the prefix…")
         await run(wine, [setup.path, "/S"], log: log)
+        // The installer starts Steam with GPU rendering (a black, off-screen window); stop it so the
+        // next start uses steamFlags.
+        await ProcessRunner.run(wineserver(for: wine), ["-k"], env: env, onLine: log)
         await waitForServer(wine, log: log)
         try? FileManager.default.removeItem(at: setup)
         guard FileManager.default.fileExists(atPath: Paths.windowsSteamExe.path) else {
@@ -120,6 +123,10 @@ enum Wine {
         }
         log("Windows Steam installed. Open it once and sign in.")
     }
+
+    /// Steam's UI is Chromium (CEF). Its GPU path fails under Wine on macOS (black windows placed
+    /// off-screen), so always render it in software.
+    static let steamFlags = ["-cef-disable-gpu", "-cef-disable-gpu-compositing", "-cef-disable-d3d11"]
 
     static var windowsSteamDir: URL { Paths.windowsSteamExe.deletingLastPathComponent() }
 

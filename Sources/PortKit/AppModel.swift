@@ -131,7 +131,7 @@ final class AppModel: ObservableObject {
     func openWindowsSteam() {
         guard let wine else { return }
         let exe = Paths.windowsSteamExe
-        Task.detached { await Wine.run(wine, [exe.path, "steam://open/main"], log: { _ in }) }
+        Task.detached { await Wine.run(wine, [exe.path] + Wine.steamFlags + ["steam://open/main"], log: { _ in }) }
     }
 
     func openWinecfg() {
