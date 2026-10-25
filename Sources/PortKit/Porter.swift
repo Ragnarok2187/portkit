@@ -201,10 +201,7 @@ enum Porter {
         if [ \(game.launchThroughSteam ? "1" : "0") = 1 ]; then
           [ -f "$STEAM_EXE" ] || fail "Steam for Windows is needed" "This game uses Steam copy protection. Open PortKit, go to Setup, and install Steam for Windows."
           if ! signed_in; then
-            steam_running || { "$WINE" "$STEAM_EXE" $STEAM_FLAGS >>"$LOG" 2>&1 & }
-            sleep 2
-            "$WINE" "$STEAM_EXE" $STEAM_FLAGS "steam://open/main" >>"$LOG" 2>&1 &
-            fail "Sign in to Steam for Windows" "The Steam window is opening. Sign in with your Steam account (tick Remember me), then open \(game.name.replacingOccurrences(of: "\"", with: "").replacingOccurrences(of: "'", with: "")) again."
+            fail "Sign in to Steam for Windows" "This game needs Steam for Windows to be signed in. Open PortKit, click Steam in the sidebar and sign in, then open \(game.name.replacingOccurrences(of: "\"", with: "").replacingOccurrences(of: "'", with: "")) again."
           fi
           start_steam
           "$WINE" "$STEAM_EXE" -silent -applaunch \(game.appID) \(args) "$@" >>"$LOG" 2>&1

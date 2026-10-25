@@ -35,13 +35,14 @@ enum Links {
 }
 
 enum Pane: String, CaseIterable, Identifiable {
-    case setup = "Setup", store = "Get Games", library = "Library", activity = "Activity"
+    case setup = "Setup", store = "Get Games", library = "Library", steam = "Steam", activity = "Activity"
     var id: String { rawValue }
     var icon: String {
         switch self {
         case .setup: "gearshape"
         case .store: "magnifyingglass"
         case .library: "gamecontroller"
+        case .steam: "macwindow"
         case .activity: "terminal"
         }
     }
@@ -56,32 +57,31 @@ final class Box<T>: ObservableObject {
 
 struct RootView: View {
     @EnvironmentObject var model: AppModel
-    @StateObject private var pane = Box<Pane?>(.setup)
-
     var body: some View {
         NavigationSplitView {
-            List(Pane.allCases, selection: $pane.value) { p in
+            List(Pane.allCases, selection: $model.pane) { p in
                 Label(p.rawValue, systemImage: p.icon).tag(p)
             }
             .navigationSplitViewColumnWidth(180)
         } detail: {
             VStack(spacing: 0) {
-                switch pane.value ?? .setup {
+                switch model.pane ?? .setup {
                 case .setup: SetupView()
                 case .store: StoreView()
                 case .library: LibraryView()
+                case .steam: SteamWindowView()
                 case .activity: ActivityView()
                 }
                 if let busy = model.busy { StatusBar(title: busy) }
             }
         }
-        .onAppear { if model.ready { pane.value = model.library.isEmpty ? .store : .library } }
+        .onAppear { if model.ready { model.pane = model.library.isEmpty ? .store : .library } }
         // Picks up sign-ins done in the Windows Steam window while PortKit was in the background.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             if model.busy == nil { model.refresh() }
         }
         .alert("Something went wrong", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
-            Button("Show Activity") { model.errorMessage = nil; pane.value = .activity }
+            Button("Show Activity") { model.errorMessage = nil; model.pane = .activity }
             Button("OK", role: .cancel) { model.errorMessage = nil }
         } message: { Text(model.errorMessage ?? "") }
         .alert("Heads up", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } })) {
@@ -197,11 +197,11 @@ struct SetupView: View {
                         detail: !model.windowsSteamInstalled
                             ? "Needed by games with Steam copy protection, achievements or multiplayer. Installed automatically when a game needs it."
                             : model.windowsSteamSignedIn ? "Installed and signed in"
-                            : "Installed but not signed in. Click Open, sign in (tick Remember me), then click Refresh.") {
+                            : "Installed but not signed in. Click Sign In.") {
                     HStack {
                         Button("Install") { model.installWindowsSteam() }.disabled(!model.prefixReady || model.busy != nil)
-                        Button("Open") { model.openWindowsSteam() }.disabled(!model.windowsSteamInstalled)
-                        Button("Refresh") { model.refresh() }.disabled(!model.windowsSteamInstalled)
+                        Button(model.windowsSteamSignedIn ? "Open" : "Sign In") { model.openWindowsSteam() }
+                            .disabled(!model.windowsSteamInstalled)
                     }
                 }
             }
@@ -471,6 +471,108 @@ struct GameSettingsView: View {
             .padding()
         }
         .frame(width: 560)
+    }
+}
+
+// MARK: - Steam windows
+
+struct SteamWindowView: View {
+    @EnvironmentObject var model: AppModel
+    @StateObject private var ui = SteamUI()
+    @StateObject private var text = Box("")
+    @StateObject private var secret = Box("")
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Picker("Window", selection: Binding(get: { ui.selected }, set: { if let p = $0 { ui.select(p) } })) {
+                    ForEach(ui.pages) { Text($0.title).tag(Optional($0)) }
+                }
+                .frame(maxWidth: 360)
+                Spacer()
+                if model.windowsSteamSignedIn {
+                    Label("Signed in", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                }
+            }
+            Text("This is Steam for Windows, shown through PortKit. Click and type here to use it. Sign in by scanning the QR code with the Steam Mobile app, or with your account name and password below.")
+                .font(.callout).foregroundStyle(.secondary)
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.85))
+                if let image = ui.image {
+                    RemotePageImage(image: image, onClick: ui.click, onScroll: ui.scroll)
+                        .padding(4)
+                } else {
+                    VStack(spacing: 8) {
+                        ProgressView()
+                        Text(ui.status.isEmpty ? "Loading…" : ui.status).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(minHeight: 300)
+
+            HStack {
+                TextField("Type into the selected field in Steam", text: $text.value)
+                    .onSubmit { ui.type(text.value); text.value = "" }
+                Button("Type") { ui.type(text.value); text.value = "" }.disabled(text.value.isEmpty)
+                SecureField("Password (typed into Steam, never saved)", text: $secret.value)
+                    .onSubmit { ui.type(secret.value); secret.value = "" }
+                Button("Type Password") { ui.type(secret.value); secret.value = "" }.disabled(secret.value.isEmpty)
+            }
+            HStack {
+                Button("Tab") { ui.press(.tab) }
+                Button("Delete") { ui.press(.backspace) }
+                Button("Enter") { ui.press(.enter) }
+                Button("Esc") { ui.press(.escape) }
+                Spacer()
+                Text("Click a field in the picture first, then type.").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .onAppear {
+            if let wine = model.wine, model.windowsSteamInstalled { try? Wine.startWindowsSteam(wine) }
+            ui.start()
+        }
+        .onDisappear { ui.stop(); model.refresh() }
+        .onReceive(Timer.publish(every: 3, on: .main, in: .common).autoconnect()) { _ in
+            let was = model.windowsSteamSignedIn
+            model.windowsSteamSignedIn = Wine.windowsSteamSignedIn
+            if !was && model.windowsSteamSignedIn {
+                model.notice = "Steam for Windows is signed in. You can play your games now."
+            }
+        }
+        .overlay {
+            if !model.windowsSteamInstalled {
+                ContentUnavailableView("Steam for Windows isn't installed", systemImage: "macwindow",
+                                       description: Text("Install it on the Setup page. PortKit also installs it automatically when a game needs it."))
+                    .background(.background)
+            }
+        }
+    }
+}
+
+/// Draws a captured Steam page and maps clicks back to the page's own pixel coordinates.
+struct RemotePageImage: View {
+    let image: NSImage
+    let onClick: (CGPoint) -> Void
+    let onScroll: (CGPoint, CGFloat) -> Void
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = image.size
+            let scale = min(geo.size.width / max(size.width, 1), geo.size.height / max(size.height, 1), 1)
+            let shown = CGSize(width: size.width * scale, height: size.height * scale)
+            let origin = CGPoint(x: (geo.size.width - shown.width) / 2, y: (geo.size.height - shown.height) / 2)
+            Image(nsImage: image)
+                .resizable()
+                .frame(width: shown.width, height: shown.height)
+                .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                .contentShape(Rectangle())
+                .onTapGesture(coordinateSpace: .local) { p in
+                    let x = (p.x - origin.x) / scale, y = (p.y - origin.y) / scale
+                    if x >= 0, y >= 0, x <= size.width, y <= size.height { onClick(CGPoint(x: x, y: y)) }
+                }
+        }
     }
 }
 

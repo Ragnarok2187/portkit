@@ -126,7 +126,31 @@ enum Wine {
 
     /// Steam's UI is Chromium (CEF). Its GPU path fails under Wine on macOS (black windows placed
     /// off-screen), so always render it in software.
-    static let steamFlags = ["-cef-disable-gpu", "-cef-disable-gpu-compositing", "-cef-disable-d3d11"]
+    /// `-cef-enable-debugging` serves Steam's pages on 127.0.0.1:8080 so PortKit can show them (see SteamUI).
+    static let steamFlags = ["-cef-disable-gpu", "-cef-disable-gpu-compositing", "-cef-disable-d3d11", "-cef-enable-debugging"]
+
+    static var windowsSteamRunning: Bool {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        p.arguments = ["-f", "Steam/steam.exe"]
+        p.standardOutput = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return false }
+        p.waitUntilExit()
+        return p.terminationStatus == 0
+    }
+
+    /// Starts Windows Steam in the background (if it isn't running) without waiting for it to exit.
+    static func startWindowsSteam(_ wine: URL) throws {
+        guard !windowsSteamRunning else { return }
+        let p = Process()
+        p.executableURL = wine
+        p.arguments = [Paths.windowsSteamExe.path, "-no-browser"] + steamFlags
+        p.environment = ProcessInfo.processInfo.environment.merging(env) { _, n in n }
+        p.standardInput = FileHandle.nullDevice
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        try p.run()
+    }
 
     static var windowsSteamDir: URL { Paths.windowsSteamExe.deletingLastPathComponent() }
 

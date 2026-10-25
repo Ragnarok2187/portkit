@@ -25,8 +25,10 @@ runs, and DirectX is translated to Metal.
   Put it in the Dock or open it from Spotlight.
 - **Two graphics backends per game:** WineD3D (OpenGL, most compatible) or DXVK (Vulkan → Metal through
   MoltenVK, faster for DirectX 10–11 games).
-- **Steamworks support:** an optional Windows Steam client in the prefix, started automatically before the
-  game, for titles that need achievements, DRM or multiplayer.
+- **Steam copy protection support:** games that need Steam (DRM, achievements, multiplayer) are registered
+  with a Windows Steam client inside the prefix and launched through it. Steam's own windows render black
+  under Wine on macOS, so PortKit shows them in its **Steam** pane, where you can sign in (QR code or password)
+  and answer any Steam dialog.
 - **Compatibility warnings:** PortKit detects kernel anti-cheat (Easy Anti-Cheat, BattlEye and others) and
   Steamworks requirements, and tells you before you hit Play.
 - **Per-game settings:** pick the executable, launch options, graphics backend and Steam start-up behavior.
@@ -59,6 +61,9 @@ runs, and DirectX is translated to Metal.
    approve the sign-in in the Steam Mobile app.
 3. **Get Games** → search for a game → **Install & Port**.
 4. **Library** → **Play**, or open the game from `~/Applications/PortKit Games`.
+
+Games with Steam copy protection (for example Batman: Arkham City) need Steam for Windows signed in once:
+open the **Steam** pane in PortKit and sign in there.
 
 If a game doesn't start, open **Library → ⋯ → Open Log**, try the other graphics backend under
 **Settings…**, or install the Windows Steam client from Setup (needed by most games that show the
@@ -109,6 +114,9 @@ Code layout (`Sources/PortKit`):
 - `Wine.swift`: Wine/DXVK install, prefix management, PE header parsing
 - `Porter.swift`: main-executable detection, compatibility checks, `.app` and launcher generation
 - `AppModel.swift`, `Views.swift`: SwiftUI app
+
+Steam for Windows is started with `-cef-enable-debugging` so PortKit can display its windows. That debug
+endpoint listens only on `127.0.0.1:8080` (this Mac), never on the network.
 
 Data lives in `~/Library/Application Support/PortKit`, logs in `~/Library/Logs/PortKit`, and generated apps
 in `~/Applications/PortKit Games`.

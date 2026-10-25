@@ -25,6 +25,7 @@ final class AppModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var notice: String?
 
+    @Published var pane: Pane? = .setup
     @Published var searchResults: [StoreItem] = []
     @Published var searching = false
     @Published var library: [PortedGame] = Library.load()
@@ -128,10 +129,15 @@ final class AppModel: ObservableObject {
         perform("Installing Windows Steam") { try await Wine.installWindowsSteam(wine, log: self.logger()) }
     }
 
+    /// Starts Windows Steam if needed and shows its windows (sign-in, dialogs) in PortKit's Steam pane.
     func openWindowsSteam() {
         guard let wine else { return }
-        let exe = Paths.windowsSteamExe
-        Task.detached { await Wine.run(wine, [exe.path] + Wine.steamFlags + ["steam://open/main"], log: { _ in }) }
+        do {
+            try Wine.startWindowsSteam(wine)
+            pane = .steam
+        } catch {
+            errorMessage = "Couldn't start Steam for Windows: \(error.localizedDescription)"
+        }
     }
 
     func openWinecfg() {
