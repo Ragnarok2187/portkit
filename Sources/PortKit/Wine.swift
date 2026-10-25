@@ -104,7 +104,6 @@ enum Wine {
     static func setRetina(_ wine: URL, enabled: Bool, log: @escaping @Sendable (String) -> Void) async {
         await run(wine, ["reg", "add", #"HKCU\Software\Wine\Mac Driver"#, "/v", "RetinaMode", "/t", "REG_SZ",
                          "/d", enabled ? "y" : "n", "/f"], log: log)
-        await waitForServer(wine, log: log)
     }
 
     /// Many Steam games call SteamAPI_Init(), which needs the Windows Steam client running in the same prefix.
@@ -234,6 +233,20 @@ enum Wine {
             throw PortKitError("Windows Steam already has a folder named “\(folder)”. Remove it and try again.")
         }
         try fm.createSymbolicLink(at: link, withDestinationURL: installDir)
+    }
+
+    /// Per-executable DLL overrides in the registry. Unlike WINEDLLOVERRIDES in the launcher's environment,
+    /// these also apply when Steam starts the game (it inherits Steam's environment, not ours).
+    static func setDXVKOverrides(_ wine: URL, exeName: String, enabled: Bool, log: @escaping @Sendable (String) -> Void) async {
+        let key = #"HKCU\Software\Wine\AppDefaults\"# + exeName + #"\DllOverrides"#
+        if enabled {
+            for dll in ["d3d11", "d3d10core"] {
+                await run(wine, ["reg", "add", key, "/v", dll, "/t", "REG_SZ", "/d", "native,builtin", "/f"], log: log)
+            }
+        } else {
+            await run(wine, ["reg", "delete", key, "/f"], log: { _ in })
+        }
+        // No `wineserver -w` here: registry writes apply at once, and the server never exits while Steam runs.
     }
 
     // MARK: DXVK (DirectX 10/11 → Vulkan → Metal via MoltenVK)

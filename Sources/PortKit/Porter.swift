@@ -129,6 +129,7 @@ enum Porter {
         try? String(game.appID).write(to: exe.deletingLastPathComponent().appendingPathComponent("steam_appid.txt"),
                                       atomically: true, encoding: .utf8)
         try applyGraphics(game)
+        await Wine.setDXVKOverrides(wine, exeName: exe.lastPathComponent, enabled: game.graphics == .dxvk, log: { _ in })
         if game.launchThroughSteam {
             try Wine.registerWithWindowsSteam(appID: game.appID, name: game.name, installDir: URL(fileURLWithPath: game.installDir))
         }

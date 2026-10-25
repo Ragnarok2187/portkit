@@ -31,6 +31,7 @@ final class AppModel: ObservableObject {
     @Published var library: [PortedGame] = Library.load()
 
     private var exeCache: [Int: [URL]] = [:]
+    private var runningGames: Set<Int> = []
     private var current: RunningProcess?
     private var cancelled = false
 
@@ -42,6 +43,7 @@ final class AppModel: ObservableObject {
         Task { [weak self] in
             while !Task.isCancelled {
                 Wine.hideNativeSteamWindows()
+                self?.minimizeWhenGameStarts()
                 if FileManager.default.fileExists(atPath: Paths.showSteamFlag.path) {
                     try? FileManager.default.removeItem(at: Paths.showSteamFlag)
                     self?.refresh()
@@ -86,6 +88,22 @@ final class AppModel: ObservableObject {
             current = nil
             refresh()
         }
+    }
+
+    /// Gets PortKit out of the way once a game's own process appears (after any Steam dialogs are done).
+    private func minimizeWhenGameStarts() {
+        let exes = Dictionary(library.map { ($0.appID, URL(fileURLWithPath: $0.exePath).lastPathComponent) }) { a, _ in a }
+        guard !exes.isEmpty else { return }
+        let commandLines = NSWorkspace.shared.runningApplications
+            .filter { $0.localizedName == "wine" || $0.executableURL?.path.contains("/wine/") == true }
+            .compactMap { Wine.commandLine(of: $0.processIdentifier) }
+        let running = Set(exes.filter { _, exe in commandLines.contains { $0.contains(exe) } }.keys)
+        if !running.subtracting(runningGames).isEmpty {
+            for window in NSApp.windows where window.isVisible && !window.isMiniaturized && window.canBecomeMain {
+                window.miniaturize(nil)
+            }
+        }
+        runningGames = running
     }
 
     func refresh() {
