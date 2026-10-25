@@ -121,6 +121,65 @@ enum Wine {
         log("Windows Steam installed. Open it once and sign in.")
     }
 
+    static var windowsSteamDir: URL { Paths.windowsSteamExe.deletingLastPathComponent() }
+
+    /// Windows Steam records accounts that have signed in on this "PC" in loginusers.vdf.
+    static var windowsSteamSignedIn: Bool {
+        let file = windowsSteamDir.appendingPathComponent("config/loginusers.vdf")
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return false }
+        return text.contains("\"AccountName\"")
+    }
+
+    /// Reads a top-level string value (e.g. "installdir") from a Steam .acf/.vdf file.
+    static func vdfValue(_ key: String, in text: String) -> String? {
+        let pattern = "\"\(NSRegularExpression.escapedPattern(for: key))\"\\s+\"([^\"]*)\""
+        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
+        let ns = text as NSString
+        guard let m = re.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        return ns.substring(with: m.range(at: 1))
+    }
+
+    /// Makes Windows Steam see a SteamCMD-downloaded game as installed, by copying its app manifest
+    /// and linking steamapps/common/<installdir> to the game folder. Games with Steam DRM must be
+    /// started by the Steam client itself (or they show "Application load error P:0000065432").
+    static func registerWithWindowsSteam(appID: Int, name: String, installDir: URL) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: Paths.windowsSteamExe.path) else {
+            throw PortKitError("Install Steam for Windows on the Setup page first.")
+        }
+        let steamapps = windowsSteamDir.appendingPathComponent("steamapps", isDirectory: true)
+        let common = steamapps.appendingPathComponent("common", isDirectory: true)
+        try fm.createDirectory(at: common, withIntermediateDirectories: true)
+
+        let source = installDir.appendingPathComponent("steamapps/appmanifest_\(appID).acf")
+        var manifest = (try? String(contentsOf: source, encoding: .utf8)) ?? ""
+        var folder = vdfValue("installdir", in: manifest) ?? ""
+        if folder.isEmpty || folder.contains("/") || folder.contains("..") {
+            folder = name.fileSafe
+            manifest = """
+            "AppState"
+            {
+            \t"appid"\t\t"\(appID)"
+            \t"Universe"\t\t"1"
+            \t"name"\t\t"\(name.replacingOccurrences(of: "\"", with: ""))"
+            \t"StateFlags"\t\t"4"
+            \t"installdir"\t\t"\(folder)"
+            }
+
+            """
+        }
+        try manifest.write(to: steamapps.appendingPathComponent("appmanifest_\(appID).acf"), atomically: true, encoding: .utf8)
+
+        let link = common.appendingPathComponent(folder)
+        if let existing = try? fm.destinationOfSymbolicLink(atPath: link.path), existing == installDir.path { return }
+        if (try? fm.attributesOfItem(atPath: link.path)[.type] as? FileAttributeType) == .typeSymbolicLink {
+            try fm.removeItem(at: link)
+        } else if fm.fileExists(atPath: link.path) {
+            throw PortKitError("Windows Steam already has a folder named “\(folder)”. Remove it and try again.")
+        }
+        try fm.createSymbolicLink(at: link, withDestinationURL: installDir)
+    }
+
     // MARK: DXVK (DirectX 10/11 → Vulkan → Metal via MoltenVK)
 
     static let dxvkDLLs = ["d3d9.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll"]

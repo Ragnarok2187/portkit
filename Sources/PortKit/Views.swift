@@ -76,6 +76,10 @@ struct RootView: View {
             }
         }
         .onAppear { if model.ready { pane.value = model.library.isEmpty ? .store : .library } }
+        // Picks up sign-ins done in the Windows Steam window while PortKit was in the background.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            if model.busy == nil { model.refresh() }
+        }
         .alert("Something went wrong", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("Show Activity") { model.errorMessage = nil; pane.value = .activity }
             Button("OK", role: .cancel) { model.errorMessage = nil }
@@ -188,12 +192,16 @@ struct SetupView: View {
                 }
             }
 
-            Section("3. Optional: Windows Steam client") {
-                StepRow(done: model.windowsSteamInstalled, title: "Steam for Windows (in prefix)",
-                        detail: "Needed by games that use Steamworks (achievements, DRM, multiplayer). Install, then open it once and sign in.") {
+            Section("3. Steam for Windows") {
+                StepRow(done: model.windowsSteamInstalled && model.windowsSteamSignedIn, title: "Steam for Windows (in prefix)",
+                        detail: !model.windowsSteamInstalled
+                            ? "Needed by games with Steam copy protection, achievements or multiplayer. Installed automatically when a game needs it."
+                            : model.windowsSteamSignedIn ? "Installed and signed in"
+                            : "Installed but not signed in. Click Open, sign in (tick Remember me), then click Refresh.") {
                     HStack {
                         Button("Install") { model.installWindowsSteam() }.disabled(!model.prefixReady || model.busy != nil)
                         Button("Open") { model.openWindowsSteam() }.disabled(!model.windowsSteamInstalled)
+                        Button("Refresh") { model.refresh() }.disabled(!model.windowsSteamInstalled)
                     }
                 }
             }
@@ -367,7 +375,7 @@ struct LibraryView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(game.name).font(.headline)
                     HStack(spacing: 6) {
-                        Text(URL(fileURLWithPath: game.exePath).lastPathComponent)
+                        Text(game.launchThroughSteam ? "Launches through Steam" : URL(fileURLWithPath: game.exePath).lastPathComponent)
                         if game.graphics == .dxvk { Tag("DXVK", color: .blue) }
                         if game.usesSteamworks { Tag("Steamworks", color: .purple) }
                         if let ac = game.antiCheat { Tag(ac, color: .red).help("Kernel anti-cheat usually blocks Wine.") }
@@ -446,7 +454,10 @@ struct GameSettingsView: View {
                 Picker("Graphics", selection: $draft.value.graphics) {
                     ForEach(Graphics.allCases) { Text($0.label).tag($0) }
                 }
-                Toggle("Start Windows Steam before the game", isOn: $draft.value.launchSteamFirst)
+                Toggle("Launch through Steam (needed for Steam copy protection)", isOn: $draft.value.launchThroughSteam)
+                if !draft.value.launchThroughSteam {
+                    Toggle("Start Windows Steam before the game", isOn: $draft.value.launchSteamFirst)
+                }
                 if draft.value.graphics == .dxvk && !Wine.dxvkInstalled {
                     Label("Install DXVK on the Setup page first.", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
                 }

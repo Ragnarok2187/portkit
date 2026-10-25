@@ -9,6 +9,7 @@ final class AppModel: ObservableObject {
     @Published var rosetta = true
     @Published var prefixReady = Wine.prefixReady
     @Published var windowsSteamInstalled = FileManager.default.fileExists(atPath: Paths.windowsSteamExe.path)
+    @Published var windowsSteamSignedIn = Wine.windowsSteamSignedIn
     @Published var dxvkInstalled = Wine.dxvkInstalled
     @Published var retinaMode = UserDefaults.standard.bool(forKey: "retinaMode")
 
@@ -78,6 +79,7 @@ final class AppModel: ObservableObject {
         wine = Wine.locate()
         prefixReady = Wine.prefixReady
         windowsSteamInstalled = FileManager.default.fileExists(atPath: Paths.windowsSteamExe.path)
+        windowsSteamSignedIn = Wine.windowsSteamSignedIn
         dxvkInstalled = Wine.dxvkInstalled
     }
 
@@ -129,7 +131,7 @@ final class AppModel: ObservableObject {
     func openWindowsSteam() {
         guard let wine else { return }
         let exe = Paths.windowsSteamExe
-        Task.detached { await Wine.run(wine, [exe.path], log: { _ in }) }
+        Task.detached { await Wine.run(wine, [exe.path, "steam://open/main"], log: { _ in }) }
     }
 
     func openWinecfg() {
@@ -230,15 +232,21 @@ final class AppModel: ObservableObject {
                               appPath: "", headerImage: details.header_image)
             if !FileManager.default.fileExists(atPath: game.exePath) { game.exePath = best.path }
             let analysis = Porter.analyze(dir)
+            let isNew = !self.library.contains { $0.appID == appID }
             game.usesSteamworks = analysis.usesSteamworks
             game.antiCheat = analysis.antiCheat
+            if isNew { game.launchThroughSteam = analysis.usesSteamworks }
+            if game.launchThroughSteam && !FileManager.default.fileExists(atPath: Paths.windowsSteamExe.path) {
+                self.busy = "Installing Steam for Windows (needed by \(details.name))"
+                try await Wine.installWindowsSteam(wine, log: self.logger())
+            }
             game.appPath = try await Porter.buildApp(for: game, wine: wine).path
             self.store(game)
             self.append("✔︎ Created \(game.appPath) → \(URL(fileURLWithPath: game.exePath).lastPathComponent)")
             if let ac = analysis.antiCheat {
                 self.notice = "\(details.name) uses \(ac). Kernel-level anti-cheat doesn't run under Wine, so online play (and sometimes the whole game) will likely fail."
-            } else if analysis.usesSteamworks && !self.windowsSteamInstalled {
-                self.notice = "\(details.name) uses Steamworks. If it won't start, install the Windows Steam client on the Setup page and sign in to it once."
+            } else if game.launchThroughSteam && !Wine.windowsSteamSignedIn {
+                self.notice = "\(details.name) uses Steam copy protection, so it runs through Steam for Windows. The first time you play, sign in to the Steam window that opens (tick Remember me), then open the game again."
             }
         }
     }

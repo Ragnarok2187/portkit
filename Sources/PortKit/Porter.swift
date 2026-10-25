@@ -25,6 +25,9 @@ struct PortedGame: Codable, Identifiable, Hashable {
     var graphics = Graphics.wined3d
     var usesSteamworks = false
     var antiCheat: String?
+    /// Start the game with `steam.exe -applaunch` instead of running its exe directly.
+    /// Required by games with Steam DRM; defaults to on for Steamworks games.
+    var launchThroughSteam = false
 
     init(appID: Int, name: String, installDir: String, exePath: String, appPath: String, headerImage: String?) {
         self.appID = appID; self.name = name; self.installDir = installDir
@@ -45,6 +48,7 @@ struct PortedGame: Codable, Identifiable, Hashable {
         graphics = try c.decodeIfPresent(Graphics.self, forKey: .graphics) ?? .wined3d
         usesSteamworks = try c.decodeIfPresent(Bool.self, forKey: .usesSteamworks) ?? false
         antiCheat = try c.decodeIfPresent(String.self, forKey: .antiCheat)
+        launchThroughSteam = try c.decodeIfPresent(Bool.self, forKey: .launchThroughSteam) ?? usesSteamworks
     }
 }
 
@@ -125,6 +129,9 @@ enum Porter {
         try? String(game.appID).write(to: exe.deletingLastPathComponent().appendingPathComponent("steam_appid.txt"),
                                       atomically: true, encoding: .utf8)
         try applyGraphics(game)
+        if game.launchThroughSteam {
+            try Wine.registerWithWindowsSteam(appID: game.appID, name: game.name, installDir: URL(fileURLWithPath: game.installDir))
+        }
 
         let hasIcon = await makeIcon(game: game, into: resources.appendingPathComponent("AppIcon.icns"))
 
@@ -178,14 +185,37 @@ enum Porter {
         fail() { osascript -e "display alert \\"$1\\" message \\"$2\\"" >/dev/null 2>&1; exit 1; }
         [ -x "$WINE" ] || fail "Wine not found" "Open PortKit and reinstall Wine on the Setup page."
         [ -f "$EXE" ] || fail "Game files not found" "Open PortKit and reinstall this game."
-        if [ \(game.launchSteamFirst ? "1" : "0") = 1 ] && [ -f "$STEAM_EXE" ] && ! pgrep -f 'Steam/steam.exe' >/dev/null; then
+        steam_running() { pgrep -f 'Steam/steam.exe' >/dev/null; }
+        signed_in() { grep -q '"AccountName"' "$WINEPREFIX/drive_c/Program Files (x86)/Steam/config/loginusers.vdf" 2>/dev/null; }
+        start_steam() {
+          steam_running && return
           "$WINE" "$STEAM_EXE" -silent -no-browser >>"$LOG" 2>&1 &
-          # Give the Windows Steam client time to sign in before the game calls SteamAPI_Init().
+          # Give the Windows Steam client time to sign in before the game asks it for anything.
           for i in $(seq 1 45); do
             pgrep -f 'steamwebhelper' >/dev/null && break
             sleep 1
           done
           sleep 5
+        }
+        if [ \(game.launchThroughSteam ? "1" : "0") = 1 ]; then
+          [ -f "$STEAM_EXE" ] || fail "Steam for Windows is needed" "This game uses Steam copy protection. Open PortKit, go to Setup, and install Steam for Windows."
+          if ! signed_in; then
+            "$WINE" "$STEAM_EXE" "steam://open/main" >>"$LOG" 2>&1 &
+            fail "Sign in to Steam for Windows" "The Steam window is opening. Sign in with your Steam account (tick Remember me), then open \(game.name.replacingOccurrences(of: "\"", with: "").replacingOccurrences(of: "'", with: "")) again."
+          fi
+          start_steam
+          "$WINE" "$STEAM_EXE" -silent -applaunch \(game.appID) \(args) "$@" >>"$LOG" 2>&1
+          # Stay open while the game runs so the Dock shows it as running.
+          EXE_NAME="$(basename "$EXE")"
+          for i in $(seq 1 120); do
+            pgrep -f "$EXE_NAME" >/dev/null && break
+            sleep 1
+          done
+          while pgrep -f "$EXE_NAME" >/dev/null; do sleep 3; done
+          exit 0
+        fi
+        if [ \(game.launchSteamFirst ? "1" : "0") = 1 ] && [ -f "$STEAM_EXE" ]; then
+          start_steam
         fi
         cd "$(dirname "$EXE")"
         "$WINE" "$EXE" \(args) "$@" >>"$LOG" 2>&1

@@ -149,6 +149,33 @@ import Testing
         #expect(games.first?.launchSteamFirst == true)
     }
 
+    @Test func steamDRMGamesLaunchThroughSteam() {
+        var game = PortedGame(appID: 200260, name: "Batman: Arkham City", installDir: "/g", exePath: "/g/BatmanAC.exe",
+                              appPath: "", headerImage: nil)
+        game.launchThroughSteam = true
+        let script = Porter.launchScript(for: game, wine: URL(fileURLWithPath: "/w/bin/wine"))
+        #expect(script.contains("-applaunch 200260"))
+        #expect(script.contains("loginusers.vdf"))
+    }
+
+    @Test func steamworksGamesDefaultToSteamLaunch() throws {
+        let json = #"[{"appID":5,"name":"Old","installDir":"/a","exePath":"/a/b.exe","appPath":"/c.app","usesSteamworks":true}]"#
+        let games = try JSONDecoder().decode([PortedGame].self, from: Data(json.utf8))
+        #expect(games.first?.launchThroughSteam == true)
+    }
+
+    @Test func readsAppManifest() {
+        let acf = """
+        "AppState"
+        {
+        	"appid"		"200260"
+        	"installdir"		"Batman Arkham City GOTY"
+        }
+        """
+        #expect(Wine.vdfValue("installdir", in: acf) == "Batman Arkham City GOTY")
+        #expect(Wine.vdfValue("missing", in: acf) == nil)
+    }
+
     @Test func icnsHeader() {
         let data = Porter.icnsData(png: Data([1, 2, 3]))
         #expect(data.prefix(4) == Data("icns".utf8))
